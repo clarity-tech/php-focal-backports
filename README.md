@@ -225,7 +225,8 @@ the new fingerprint is registered to the uploader's Launchpad account
 
 ## Licences
 
-This repository holds only build, test and install tooling. The PHP sources and their Debian
+This repository holds only build, test and install tooling, released under the MIT License (see
+[LICENSE](LICENSE)). The PHP sources and their Debian
 packaging are downloaded from Launchpad at build time. They are not included here, and they keep
 their own licences: the PHP License, and the packaging's own terms. `keys/` holds the PPA
 maintainer's public upload key.
