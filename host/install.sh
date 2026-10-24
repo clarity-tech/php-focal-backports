@@ -42,6 +42,11 @@ rm -rf debs && mkdir debs && tar --warning=no-unknown-keyword -xf bundle.tar -C 
 (cd debs && sha256sum --quiet -c SHA256SUMS) || { echo "!! a package inside the bundle fails SHA256SUMS"; exit 2; }
 grep -E '^(bundle|target|built|php):' debs/BUILDINFO | sed 's/^/   /'
 [ "$(dpkg --print-architecture)" = "$(awk '/^target:/{print $NF}' debs/BUILDINFO)" ] || { echo "!! bundle is for another architecture"; exit 2; }
+# BUILDINFO's target line reads "Ubuntu 20.04 (focal) arm64": the codename is the bracketed field.
+want_series=$(awk '/^target:/{for (i = 2; i <= NF; i++) if ($i ~ /^\(.+\)$/) {gsub(/[()]/, "", $i); print $i}}' debs/BUILDINFO)
+host_series=$(. /etc/os-release; echo "${VERSION_CODENAME:-}")
+[ -n "$want_series" ] && [ "$want_series" = "$host_series" ] \
+  || { echo "!! bundle is for Ubuntu ${want_series:-?}, this host is ${host_series:-unknown}"; exit 2; }
 
 # 2. Which branch: the bundle's one php<X.Y>-common package names it.
 common=$(cd debs && for f in php[0-9]*.[0-9]*-common_*.deb; do [ -e "$f" ] && echo "$f"; done)
@@ -94,6 +99,8 @@ have=$(dpkg-query -W -f='${Version}' "$PHP-common")
 if echo "$have" | grep -qE -- '-[0-9.]+ubuntu[0-9]'; then
   echo "!! $PHP-common $have is Ubuntu's own build, not the PPA's; refusing to replace it (Ubuntu ships its fix)"; exit 2
 fi
+dpkg --compare-versions "$new" ge "$have" \
+  || { echo "!! $PHP-common $have is newer than the bundle's $new; refusing to downgrade"; exit 2; }
 echo "== $PHP-common $have -> $new | upgrading $(echo $files | wc -w | tr -d ' ') packages"
 
 # 4. Dry run, and refuse anything beyond those packages.

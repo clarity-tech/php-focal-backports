@@ -313,14 +313,20 @@ embed SAPI included. A host with two branches installed takes two bundles, one r
 It refuses to install unless all of these hold:
 
 - the bundle's sha256 matches, and every package inside matches `SHA256SUMS`;
-- the bundle is for this host's architecture;
+- the bundle is for this host's architecture and Ubuntu release;
 - the bundle is at or above its branch's fix floor, which `install.sh` keeps in its own table
   rather than trusting the bundle;
 - the host runs the PPA's (or packages.sury.org's) build of that branch, not Ubuntu's own, such as
   focal's php7.4 7.4.3, which Ubuntu fixes itself;
+- the bundle's version is not lower than the host's, so it never downgrades;
 - every package of that branch the host has is in the bundle, so there is no partial upgrade;
 - apt's dry run removes nothing and changes nothing but those packages, plus `php-common` if the
   host's is older than the new packages need.
+
+One exception: if `php<branch>-dev` is installed, the installer **removes** it instead of upgrading
+it. It holds only build headers, and a copy force-installed from another distribution can leave
+apt unable to resolve anything. If you build PECL extensions, reinstall it from the bundle
+afterwards (with `libpcre2-dev`).
 
 Modified config files are kept, so pool and `php.ini` edits survive, including a temporary stopgap.
 Separately built extensions (mongodb, redis, igbinary, msgpack, opentelemetry) are not touched: they
