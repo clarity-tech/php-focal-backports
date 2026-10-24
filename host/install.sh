@@ -88,6 +88,12 @@ if ! dpkg --compare-versions "$(dpkg-query -W -f='${Version}' php-common 2>/dev/
   files="$files ./$(ls debs/php-common_*.deb)"; echo "   php-common is older than $need, including it"
 fi
 have=$(dpkg-query -W -f='${Version}' "$PHP-common")
+# These bundles replace the PPA's (or packages.sury.org's) builds. A series' own PHP, such as focal's
+# php7.4 7.4.3-4ubuntu2.x, is a different supplier's: Ubuntu fixes it (USN-8948-2, through Ubuntu
+# Pro), and switching it to 7.4.33 is not a security update.
+if echo "$have" | grep -qE -- '-[0-9.]+ubuntu[0-9]'; then
+  echo "!! $PHP-common $have is Ubuntu's own build, not the PPA's; refusing to replace it (Ubuntu ships its fix)"; exit 2
+fi
 echo "== $PHP-common $have -> $new | upgrading $(echo $files | wc -w | tr -d ' ') packages"
 
 # 4. Dry run, and refuse anything beyond those packages.
