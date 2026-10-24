@@ -62,6 +62,7 @@ a2dismod -q -f mpm_event mpm_worker >/dev/null 2>&1 || true
 a2enmod -q mpm_prefork >/dev/null 2>&1 || true
 a2enmod -q "$P" >/dev/null 2>&1 || true
 modso=$(ls /usr/lib/apache2/modules/libphp*.so 2>/dev/null | head -1)
+echo "   info: libapache2-mod-$P depends: $(dpkg-query -W -f='${Depends}' "libapache2-mod-$P")"
 cat > /var/www/html/php-smoke.php <<'PHP'
 <?php
 header('Content-Type: text/plain');
