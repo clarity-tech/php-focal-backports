@@ -1,0 +1,129 @@
+# Build, test and package every target on native GitHub runners, then publish the bundles to a
+# GitHub Release when a tag is pushed (e.g. v8.1.34-9-clarity1). Run it by hand to build without
+# releasing.
+#
+# Each bundle gets a build provenance attestation, so a host can check where it came from:
+#   gh attestation verify <bundle>.tar --repo clarity-tech/php-focal-backports
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  # Distinct from the default (backport1) so these builds never share a version string with a
+  # private build of the same revision. Bump it for every rebuild of the same revision.
+  LOCAL_TAG: clarity1
+  MAINTAINER: Clarity Technologies <sales@claritytech.io>
+
+jobs:
+  build:
+    name: ${{ matrix.target }} ${{ matrix.arch }}
+    strategy:
+      fail-fast: false
+      matrix:
+        target: [focal, resolute]
+        arch: [arm64, amd64]
+        include:
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+          - arch: amd64
+            runner: ubuntu-24.04
+    runs-on: ${{ matrix.runner }}
+    # A PHP build is 30-60 minutes of CPU; focal also rebuilds five libraries first.
+    timeout-minutes: 300
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+    env:
+      TARGET: ${{ matrix.target }}
+      ARCH: ${{ matrix.arch }}
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Build
+        run: make build
+
+      - name: Test
+        run: make test
+
+      # The build and test containers run as root on the bind-mounted work tree.
+      - name: Take back ownership of the work tree
+        run: sudo chown -R "$(id -u):$(id -g)" .
+
+      - name: Package
+        run: make package
+
+      - uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: dist/*.tar
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: bundle-${{ matrix.target }}-${{ matrix.arch }}
+          path: |
+            dist/*.tar
+            dist/*.tar.sha256
+          if-no-files-found: error
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/')
+    needs: build
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      # GitHub rewrites `+` and `~` in asset names, so give the assets URL-safe names up front and
+      # keep each .sha256 file matching its asset.
+      - name: Name the assets
+        working-directory: dist
+        run: |
+          for f in *.tar; do
+            safe=$(printf '%s' "$f" | tr '+~' '__')
+            [ "$f" = "$safe" ] || mv "$f" "$safe"
+            rm -f "$f.sha256"
+            sha256sum "$safe" > "$safe.sha256"
+          done
+          cp ../host/install.sh .
+          ls -l
+
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          base="https://github.com/$GITHUB_REPOSITORY/releases/download/$TAG"
+          {
+            echo "Rebuilds of \`ppa:ondrej/php\`'s signed php8.1 source, unchanged, for Ubuntu 20.04 (focal) and 26.04 (resolute). Read the README before installing, and snapshot each production node first."
+            echo
+            echo "| Bundle | sha256 |"
+            echo "|---|---|"
+            for f in dist/*.tar.sha256; do
+              read -r sum name < "$f"
+              echo "| [\`$name\`]($base/$name) | \`$sum\` |"
+            done
+            echo
+            echo "Install on a host, one node at a time, simulating first:"
+            echo
+            echo '```bash'
+            echo "curl -fsSLO $base/install.sh"
+            echo "sudo bash install.sh simulate '$base/<bundle>.tar' <sha256>"
+            echo "sudo bash install.sh apply    '$base/<bundle>.tar' <sha256>"
+            echo '```'
+            echo
+            echo "Check a bundle's build provenance: \`gh attestation verify <bundle>.tar --repo $GITHUB_REPOSITORY\`"
+          } > notes.md
+          gh release create "$TAG" dist/*.tar dist/*.tar.sha256 dist/install.sh \
+            --repo "$GITHUB_REPOSITORY" --title "$TAG" --notes-file notes.md

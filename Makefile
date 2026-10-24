@@ -13,7 +13,8 @@ $(error no TARGET_SERIES for TARGET=$(TARGET): is there a targets/$(TARGET).env?
 endif
 ARCH   ?= arm64
 IMAGE  ?= ubuntu:$(SERIES)
-RUN     = docker run --rm$(if $(CONTAINER), --name $(CONTAINER)) --platform linux/$(ARCH) -e TARGET=$(TARGET) -e ARCH=$(ARCH) -e BUILDER_IMAGE=$(IMAGE) -v "$(CURDIR)":/work -w /work $(IMAGE)
+# LOCAL_TAG and MAINTAINER pass through only when set, so config.env's defaults apply otherwise.
+RUN     = docker run --rm$(if $(CONTAINER), --name $(CONTAINER)) --platform linux/$(ARCH) -e TARGET=$(TARGET) -e ARCH=$(ARCH) -e BUILDER_IMAGE=$(IMAGE) -e LOCAL_TAG -e MAINTAINER -v "$(CURDIR)":/work -w /work $(IMAGE)
 
 .PHONY: all fetch build test package upload presign clean
 all: build test package

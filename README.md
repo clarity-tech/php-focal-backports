@@ -163,9 +163,28 @@ prefix, so no AWS keys are stored in CI. `aws/setup.sh` creates the bucket and t
 dry run by default; `--apply` makes the changes. It needs `GITLAB_PROJECT_PATH`, `S3_BUCKET` and
 `AWS_REGION_NAME`. Then set `AWS_ROLE_ARN` as a CI/CD variable.
 
-A GitHub Actions port onto `ubuntu-24.04-arm` runners would be straightforward. It is not included.
+`.github/workflows/release.yml` does the same on GitHub's runners, for both targets on arm64
+(`ubuntu-24.04-arm`) and amd64 (`ubuntu-24.04`). Pushing a `v*` tag publishes the four bundles,
+their `.sha256` files and `install.sh` as a GitHub Release, each bundle with a build provenance
+attestation. It builds with `LOCAL_TAG=clarity1`, so its versions never collide with a private
+build of the same revision.
 
 ## Installing on a host
+
+### Prebuilt bundles
+
+Each [release](https://github.com/clarity-tech/php-focal-backports/releases) carries a bundle for
+each of focal and resolute, on arm64 and amd64, with its sha256, all built by the release
+workflow. Check where a bundle came from before you trust it:
+
+```bash
+gh attestation verify <bundle>.tar --repo clarity-tech/php-focal-backports
+```
+
+Then install with the release's asset URL and sha256, as below. If you would rather not trust
+our builds, build your own; that is what the rest of this README is for.
+
+### Your own builds
 
 The bucket stays private. Hosts fetch the bundle through a pre-signed URL, so no instance role
 needs S3 access:
