@@ -1,0 +1,4 @@
+# Downloaded sources, build trees and outputs. Releases live in S3 and CI artifacts, not in git.
+src/
+build/
+dist/

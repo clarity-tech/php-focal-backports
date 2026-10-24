@@ -1,0 +1,127 @@
+# Build, test and package each target on arm64; upload is a manual step on the default branch.
+# Each job runs directly in ubuntu:<series>, so no docker-in-docker is needed.
+#
+# Targets: focal (Ubuntu 20.04 hosts) and resolute (Ubuntu 26.04 images). Each has its own
+# build -> test -> package -> upload chain, linked by `needs`, so one target does not wait for the
+# other.
+#
+# Runners: GitLab's hosted arm64 runners. Small self-hosted runners (2 GB) run out of memory on this
+# build (cc1 is killed compiling ext/fileinfo).
+# A PHP build is roughly 30-60 minutes of CPU.
+# Upload: GitLab OIDC -> IAM role gitlab-ci-php-focal-backports (created by aws/setup.sh), which only
+# this project's main branch can assume and which may only PutObject under the bucket's prefix.
+# No stored AWS keys. Set AWS_ROLE_ARN (the role's ARN) as a project CI/CD variable.
+
+stages: [build, test, package, upload]
+
+variables:
+  ARCH: arm64
+  # Hosted arm64 runner, 4 vCPU / 16 GB.
+  BUILD_RUNNER_TAG: saas-linux-medium-arm64
+
+# Per-target settings. BUILDER_IMAGE goes into the bundle's BUILDINFO, so keep it equal to `image`.
+.focal:
+  image: ubuntu:focal
+  variables:
+    TARGET: focal
+    BUILDER_IMAGE: ubuntu:focal
+
+.resolute:
+  image: ubuntu:resolute
+  variables:
+    TARGET: resolute
+    BUILDER_IMAGE: ubuntu:resolute
+
+# Per-step templates.
+.build:
+  stage: build
+  timeout: 3h
+  tags: ["$BUILD_RUNNER_TAG"]
+  before_script:
+    - apt-get update -qq && apt-get install -y -qq --no-install-recommends ca-certificates curl python3 >/dev/null
+  script:
+    - bash scripts/fetch.sh
+    - bash scripts/build.sh
+  artifacts:
+    paths: [src/, dist/]
+    expire_in: 30 days
+    when: always
+
+# A fresh container of the target series, so the test sees what a real host would. It installs the
+# arm64 .debs, so it has to run on an arm64 runner.
+.test:
+  stage: test
+  tags: [saas-linux-small-arm64]
+  script:
+    - bash scripts/test.sh
+
+.package:
+  stage: package
+  tags: [saas-linux-small-arm64]
+  before_script:
+    - apt-get update -qq && apt-get install -y -qq --no-install-recommends git >/dev/null
+  script:
+    - bash scripts/package.sh
+  artifacts:
+    paths: ["dist/*.tar", "dist/*.tar.sha256"]
+    expire_in: 90 days
+
+.upload:
+  stage: upload
+  tags: [saas-linux-small-arm64]
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+      when: manual
+      allow_failure: true
+  id_tokens:
+    GITLAB_OIDC_TOKEN:
+      aud: https://gitlab.com
+  variables:
+    AWS_PROFILE_NAME: ""
+    AWS_WEB_IDENTITY_TOKEN_FILE: /tmp/gitlab_oidc_token
+    AWS_ROLE_SESSION_NAME: "php-focal-backports-$CI_PIPELINE_ID"
+  before_script:
+    - apt-get update -qq && apt-get install -y -qq --no-install-recommends awscli ca-certificates >/dev/null
+    - echo "$GITLAB_OIDC_TOKEN" > "$AWS_WEB_IDENTITY_TOKEN_FILE" && chmod 600 "$AWS_WEB_IDENTITY_TOKEN_FILE"
+    - test -s "$AWS_WEB_IDENTITY_TOKEN_FILE" || { echo "OIDC token is empty -- is id_tokens set?"; exit 1; }
+    - aws sts get-caller-identity --query Arn --output text
+  script:
+    - bash scripts/upload.sh --apply
+
+# focal: Ubuntu 20.04
+build:focal:
+  extends: [.focal, .build]
+
+test:focal:
+  extends: [.focal, .test]
+  needs: ["build:focal"]
+
+package:focal:
+  extends: [.focal, .package]
+  needs:
+    - job: build:focal
+    - job: test:focal
+      artifacts: false
+
+upload:focal:
+  extends: [.focal, .upload]
+  needs: ["package:focal"]
+
+# resolute: Ubuntu 26.04
+build:resolute:
+  extends: [.resolute, .build]
+
+test:resolute:
+  extends: [.resolute, .test]
+  needs: ["build:resolute"]
+
+package:resolute:
+  extends: [.resolute, .package]
+  needs:
+    - job: build:resolute
+    - job: test:resolute
+      artifacts: false
+
+upload:resolute:
+  extends: [.resolute, .upload]
+  needs: ["package:resolute"]
