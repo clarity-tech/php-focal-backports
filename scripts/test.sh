@@ -15,8 +15,10 @@ WANT="${TEST_PACKAGES:?TEST_PACKAGES is not set in targets/$TARGET.env} $(for e 
 debs=""; for p in $WANT; do f=$(ls "$DIST_DIR/${p}_"*.deb 2>/dev/null | head -1); [ -n "$f" ] || die "$p was not built"; debs="$debs $f"; done
 
 apt-get update -qq
-apt-get install -y -qq --no-install-recommends $debs > /tmp/install.log 2>&1 || { tail -20 /tmp/install.log; die "install failed"; }
-log "installed: $(echo $WANT | wc -w | tr -d ' ') packages from ${DIST_DIR#"$ROOT"/}"
+# apache2 and curl, for the mod_php test, from the series' own archive. --no-install-recommends
+# would leave out apache2 itself (configs, a2enmod, apache2ctl): libapache2-mod-php only recommends it.
+apt-get install -y -qq --no-install-recommends $debs apache2 curl > /tmp/install.log 2>&1 || { tail -20 /tmp/install.log; die "install failed"; }
+log "installed: $(echo $WANT | wc -w | tr -d ' ') packages from ${DIST_DIR#"$ROOT"/}, and apache2 $(dpkg-query -W -f='${Version}' apache2) from the archive"
 
 fail=0
 check() { if eval "$2" >/dev/null 2>&1; then echo "   PASS $1"; else echo "   FAIL $1"; fail=1; fi; }
@@ -49,6 +51,32 @@ check "php-fpm$PHP_BRANCH config test" "php-fpm$PHP_BRANCH -t"
 check "a PHP script runs: sessions, json, pcre, intl" \
       "$P -r 'session_start(); json_encode([1]); preg_match(\"/a/u\",\"a\"); new NumberFormatter(\"en_IN\", NumberFormatter::DECIMAL); exit(0);'"
 check "php -v reports no startup warnings" "! $P -v 2>&1 | grep -qiE 'warning|unable to load'"
+
+# mod_php, the SAPI the PHP2Shell advisory rates highest-risk: Apache loads the module and serves a
+# PHP page through it. mod_php needs the prefork MPM; switch to it here rather than rely on the
+# package's postinst doing so in a container.
+a2dismod -q -f mpm_event mpm_worker >/dev/null 2>&1 || true
+a2enmod -q mpm_prefork >/dev/null 2>&1 || true
+a2enmod -q "$P" >/dev/null 2>&1 || true
+modso=$(ls /usr/lib/apache2/modules/libphp*.so 2>/dev/null | head -1)
+cat > /var/www/html/php-smoke.php <<'PHP'
+<?php
+header('Content-Type: text/plain');
+session_start();
+echo 'mod_php ', PHP_VERSION, ' ', PHP_SAPI, ' ', json_encode(['pcre' => preg_match('/a/u', 'a'), 'session' => session_status() === PHP_SESSION_ACTIVE]);
+PHP
+want_body="mod_php $php_version apache2handler {\"pcre\":1,\"session\":true}"
+check "mod_php: apache2 configtest" "apache2ctl configtest"
+check "mod_php: apache2 loads $P (${modso#/usr/lib/apache2/modules/})" "apache2ctl -M 2>/dev/null | grep -qE '^ *php[0-9]*_module '"
+# restart, not start: it also covers an apache2 that a postinst managed to start.
+apache2ctl restart >/tmp/apache2ctl.log 2>&1 || cat /tmp/apache2ctl.log
+for _ in $(seq 20); do curl -fs -o /dev/null http://127.0.0.1/ && break; sleep 0.5; done
+body=$(curl -fsS -m 10 http://127.0.0.1/php-smoke.php 2>&1 || true)
+echo "   mod_php page: $body"
+check "mod_php: serves a PHP page (PHP $php_version, apache2handler, pcre, sessions)" '[ "$body" = "$want_body" ]'
+check "mod_php: no crashes in the Apache error log" "! grep -qiE 'segfault|exit signal|child pid [0-9]+ exit' /var/log/apache2/error.log"
+[ "${SURY_TELEMETRY:-off}" = off ] && check "mod_php has no sury DNS telemetry compiled in" "[ -n '$modso' ] && ! grep -q telemetry.sury.org '$modso'"
+apache2ctl stop >/dev/null 2>&1 || true
 echo "   info: ICU $($P -r 'echo INTL_ICU_VERSION;'), IntlListFormatter $($P -r 'echo class_exists("IntlListFormatter") ? "present" : "absent";') (PHP 8.5 compiles it in only with ICU >= 67)"
 
 # The rebuild must expose exactly what production's PHP does: same functions, classes, methods and
