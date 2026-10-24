@@ -1,8 +1,11 @@
-# Build, test and package every target on native GitHub runners, then publish the bundles to a
-# GitHub Release when a tag is pushed (e.g. v8.1.34-9-clarity1). Run it by hand to build without
-# releasing.
+# Build, test and package every branch and target on native GitHub runners, then publish the
+# bundles to a GitHub Release when a tag is pushed. Run it by hand to build without releasing.
 #
-# Each bundle gets a build provenance attestation, so a host can check where it came from:
+#   build   focal x PHP 7.4, 8.0, 8.1, 8.2, 8.3, 8.4, and resolute x PHP 8.1, each on arm64 and amd64
+#   trial   focal x PHP 8.5, on both: the PPA never built 8.5 for focal. Built and tested, allowed to
+#           fail, never released.
+#
+# Each released bundle gets a build provenance attestation, so a host can check where it came from:
 #   gh attestation verify <bundle>.tar --repo clarity-tech/php-focal-backports
 name: Release
 
@@ -16,25 +19,26 @@ permissions:
 
 env:
   # Distinct from the default (backport1) so these builds never share a version string with a
-  # private build of the same revision. Bump it for every rebuild of the same revision.
-  LOCAL_TAG: clarity1
+  # private build of the same revision. Bump it for every rebuild of the same revision:
+  # clarity2 rebuilt 8.1.34-9 for focal against its final PPA build's libraries, so its binaries
+  # differ from clarity1's.
+  LOCAL_TAG: clarity2
   MAINTAINER: Clarity Technologies <sales@claritytech.io>
 
 jobs:
   build:
-    name: ${{ matrix.target }} ${{ matrix.arch }}
+    name: ${{ matrix.target }} php${{ matrix.php }} ${{ matrix.arch }}
     strategy:
       fail-fast: false
       matrix:
-        target: [focal, resolute]
+        target: [focal]
+        php: ['7.4', '8.0', '8.1', '8.2', '8.3', '8.4']
         arch: [arm64, amd64]
         include:
-          - arch: arm64
-            runner: ubuntu-24.04-arm
-          - arch: amd64
-            runner: ubuntu-24.04
-    runs-on: ${{ matrix.runner }}
-    # A PHP build is 30-60 minutes of CPU; focal also rebuilds five libraries first.
+          - {target: resolute, php: '8.1', arch: arm64}
+          - {target: resolute, php: '8.1', arch: amd64}
+    runs-on: ${{ matrix.arch == 'arm64' && 'ubuntu-24.04-arm' || 'ubuntu-24.04' }}
+    # A PHP build is 30-60 minutes of CPU; focal also rebuilds eight libraries first.
     timeout-minutes: 300
     permissions:
       contents: read
@@ -42,6 +46,7 @@ jobs:
       attestations: write
     env:
       TARGET: ${{ matrix.target }}
+      PHP_BRANCH: ${{ matrix.php }}
       ARCH: ${{ matrix.arch }}
     steps:
       - uses: actions/checkout@v7
@@ -59,17 +64,64 @@ jobs:
       - name: Package
         run: make package
 
+      - name: Simulate host/install.sh against the bundle
+        run: make test-install
+
       - uses: actions/attest@v4
         with:
           subject-path: dist/*.tar
 
       - uses: actions/upload-artifact@v7
         with:
-          name: bundle-${{ matrix.target }}-${{ matrix.arch }}
+          name: bundle-${{ matrix.target }}-php${{ matrix.php }}-${{ matrix.arch }}
           path: |
             dist/*.tar
             dist/*.tar.sha256
           if-no-files-found: error
+
+  # The same steps as build, without the attestation, for a branch that is not released. Its own
+  # job, so that the release never waits on it or depends on its result.
+  trial:
+    name: trial ${{ matrix.target }} php${{ matrix.php }} ${{ matrix.arch }}
+    continue-on-error: true
+    strategy:
+      fail-fast: false
+      matrix:
+        target: [focal]
+        php: ['8.5']
+        arch: [arm64, amd64]
+    runs-on: ${{ matrix.arch == 'arm64' && 'ubuntu-24.04-arm' || 'ubuntu-24.04' }}
+    timeout-minutes: 300
+    env:
+      TARGET: ${{ matrix.target }}
+      PHP_BRANCH: ${{ matrix.php }}
+      ARCH: ${{ matrix.arch }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Build
+        run: make build
+
+      - name: Test
+        run: make test
+
+      - name: Take back ownership of the work tree
+        run: sudo chown -R "$(id -u):$(id -g)" .
+
+      - name: Package
+        run: make package
+
+      - name: Simulate host/install.sh against the bundle
+        run: make test-install
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: trial-${{ matrix.target }}-php${{ matrix.php }}-${{ matrix.arch }}
+          path: |
+            dist/*.tar
+            dist/*.tar.sha256
+          if-no-files-found: error
+          retention-days: 14
 
   release:
     if: startsWith(github.ref, 'refs/tags/')
@@ -80,13 +132,15 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
+      # bundle-* only: never a trial's.
       - uses: actions/download-artifact@v8
         with:
           path: dist
+          pattern: bundle-*
           merge-multiple: true
 
       # GitHub rewrites `+` and `~` in asset names, so give the assets URL-safe names up front and
-      # keep each .sha256 file matching its asset.
+      # keep each .sha256 file matching its asset. (Bundle names carry no epoch, so no `:`.)
       - name: Name the assets
         working-directory: dist
         run: |
@@ -106,7 +160,7 @@ jobs:
         run: |
           base="https://github.com/$GITHUB_REPOSITORY/releases/download/$TAG"
           {
-            echo "Rebuilds of \`ppa:ondrej/php\`'s signed php8.1 source, unchanged, for Ubuntu 20.04 (focal) and 26.04 (resolute). Read the README before installing, and snapshot each production node first."
+            echo "Rebuilds of \`ppa:ondrej/php\`'s signed sources, unchanged, with the PHP2Shell fix (CVE-2026-109618, CVE-2026-109619): PHP 7.4, 8.0, 8.1, 8.2, 8.3 and 8.4 for Ubuntu 20.04 (focal), and PHP 8.1 for 26.04 (resolute), on arm64 and amd64. Read the README before installing, and snapshot each production node first."
             echo
             echo "| Bundle | sha256 |"
             echo "|---|---|"
@@ -115,7 +169,7 @@ jobs:
               echo "| [\`$name\`]($base/$name) | \`$sum\` |"
             done
             echo
-            echo "Install on a host, one node at a time, simulating first:"
+            echo "Install on a host, one node at a time, simulating first. \`install.sh\` works for every branch: it upgrades the host's packages of the bundle's branch."
             echo
             echo '```bash'
             echo "curl -fsSLO $base/install.sh"
