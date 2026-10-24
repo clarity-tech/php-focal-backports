@@ -1,11 +1,11 @@
 <?php
 // Print the API surface of PHP's own extensions, one fact per line, sorted, so two builds can be
 // compared with diff. Run with the CLI on a production host to make a baseline
-// (targets/<target>.parity), and by scripts/test.sh on the rebuild.
+// (targets/<target>-php<branch>.parity), and by scripts/test.sh on the rebuild.
 //
 // Names only for functions, classes, methods and constants: those depend on which libraries PHP
 // was compiled against (libzip, libgd, pcre2, libxml2...), which is what this catches. Values only
-// where a library version is compiled in. Extensions that php8.1 does not build (mongodb, redis,
+// where a library version is compiled in. Extensions that PHP's own source does not build (mongodb, redis,
 // igbinary, msgpack, opentelemetry) are skipped, so a host's extra modules do not count.
 $skip = ['mongodb', 'redis', 'igbinary', 'msgpack', 'opentelemetry'];
 $out = [];

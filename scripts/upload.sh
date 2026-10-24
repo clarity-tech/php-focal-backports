@@ -8,9 +8,8 @@
 
 [ -n "$S3_BUCKET" ] || die "S3_BUCKET is not set (config.env, or the environment)"
 [ -n "$AWS_REGION_NAME" ] || die "AWS_REGION_NAME is not set (config.env, or the environment)"
-php_version=$(target_version_of "$(each_source | awk '$1=="php8.1"{print $2}')")
-name="php-backports_${php_version}_${TARGET_SERIES}_${ARCH}"
-key="$S3_PREFIX/php8.1/$php_version/$name.tar"
+name=$(bundle_name)
+key="$S3_PREFIX/$PHP_SOURCE/$(noepoch "$(target_version_of "$PHP_SOURCE_VERSION")")/$name.tar"
 aws_args=(--region "$AWS_REGION_NAME")
 [ -n "${AWS_PROFILE_NAME:-}" ] && aws_args+=(--profile "$AWS_PROFILE_NAME")
 

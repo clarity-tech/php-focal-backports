@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Rebuild every source in SOURCES for TARGET_SERIES, unchanged apart from a new changelog entry,
-# and collect the .debs into dist/<series>-<arch>/.
+# Rebuild every source in SOURCES (PHP_BRANCH's PHP, and php-defaults) for TARGET_SERIES, unchanged
+# apart from a new changelog entry, and collect the .debs into dist/<series>-php<branch>-<arch>/.
 # Runs INSIDE an Ubuntu TARGET_SERIES environment of the target architecture, as root: the
 # `make build` docker container, or a CI job whose image is ubuntu:<series>.
 . "$(dirname "$0")/lib.sh"
@@ -29,8 +29,9 @@ DEBFULLNAME=${MAINTAINER% <*}; DEBEMAIL=${MAINTAINER##*<}; DEBEMAIL=${DEBEMAIL%>
 # .debs it produced, one per line, on fd 3.
 build_one() {
   local name=$1 version=$2 dsc new note
-  dsc=$(ls "$SRC_DIR/$name"/*.dsc 2>/dev/null | head -1)
-  [ -n "$dsc" ] || die "no .dsc for $name in src/$name: run scripts/fetch.sh first"
+  # The pinned version's own .dsc: src/<name>/ may hold others (libgd2 -12 and -13).
+  dsc=$(src_dir_of "$name" "$version")/${name}_$(noepoch "$version").dsc
+  [ -f "$dsc" ] || die "no ${dsc#"$ROOT"/}: run scripts/fetch.sh first"
   new=$(target_version_of "$version")
   log "$name $version -> $new"
 
@@ -42,7 +43,7 @@ build_one() {
 
   cd "$BUILD_DIR/$name"
   # -b: the new version can sort below the one it is rebuilt from (on focal it does, on purpose).
-  note=""; [ "$name" = php8.1 ] && [ "$SURY_TELEMETRY" = off ] && note=" Built without sury's DNS telemetry (patch 0048)."
+  note=""; [ "$name" = "$PHP_SOURCE" ] && [ "$SURY_TELEMETRY" = off ] && note=" Built without sury's DNS telemetry."
   dch -b --newversion "$new" --distribution "$TARGET_SERIES" --force-distribution \
     "Rebuild of $version for Ubuntu $TARGET_VERSION ($TARGET_SERIES). No source changes.$note"
   mk-build-deps --install --remove --tool 'apt-get -y -qq --no-install-recommends' debian/control >/dev/null
@@ -53,26 +54,26 @@ build_one() {
   fi
   # nocheck: the upstream test suites take hours (PHP's); scripts/test.sh checks the result instead.
   DEB_BUILD_OPTIONS="nocheck parallel=$(nproc)" dpkg-buildpackage -b -uc -us > "$BUILD_DIR/$name.build.log" 2>&1 \
-    || { tail -40 "$BUILD_DIR/$name.build.log"; die "$name failed to build (log: build/$TARGET_SERIES-$ARCH/$name.build.log)"; }
+    || { tail -40 "$BUILD_DIR/$name.build.log"; die "$name failed to build (log: ${BUILD_DIR#"$ROOT"/}/$name.build.log)"; }
 
   cd "$BUILD_DIR"
   ls ./*.deb | sed 's#^\./##' >&3
   mv ./*.deb ./*.buildinfo ./*.changes "$DIST_DIR/"
 }
 
-# 1. Libraries (LIB_SOURCES, focal only), so php8.1 compiles against the same ones the PPA's focal
+# 1. Libraries (LIB_SOURCES, focal only), so PHP compiles against the same ones the PPA's focal
 # builds did. Each library's runtime and -dev packages go into the build container straight away,
 # before anything that builds against them; its tools, docs and language bindings do not.
-each_lib | while read -r name version; do
+each_lib | while read -r name version _; do
   debs=$(build_one "$name" "$version" 3>&1 >&2)
   want=$(echo "$debs" | grep -E '^lib' | grep -vE -- '-(dbg|doc|tools|utils)_|dbgsym' | sed "s#^#$DIST_DIR/#")
   apt-get install -y -qq --no-install-recommends $want >/dev/null
   log "installed $(echo "$want" | xargs -n1 basename | sed 's/_.*//' | tr '\n' ' ')for the builds that follow"
 done
 
-# 2. php-defaults, then the rest: php8.1 build-depends on php-common, includes its
-# /usr/lib/php/php-common.mk, and its packages need php-common >= 1:81~, which focal's own 1:75 does
-# not satisfy and resolute's own 2:99ubuntu1 Breaks (see config.env).
+# 2. php-defaults, then PHP: PHP build-depends on php-common, includes its
+# /usr/lib/php/php-common.mk, and its packages need php-common >= 1:81~ (8.4 and later: >= 2:95~),
+# which focal's own 1:75 does not satisfy and resolute's own 2:99ubuntu1 Breaks (see config.env).
 for name in php-defaults $(each_source | awk '$1 != "php-defaults" {print $1}'); do
   version=$(each_source | awk -v n="$name" '$1 == n {print $2}')
   [ -n "$version" ] || continue
@@ -83,4 +84,4 @@ for name in php-defaults $(each_source | awk '$1 != "php-defaults" {print $1}');
   fi
 done
 rm -f "$keyring"
-log "built $(ls "$DIST_DIR"/*.deb | wc -l | tr -d ' ') packages into dist/$TARGET_SERIES-$ARCH"
+log "built $(ls "$DIST_DIR"/*.deb | wc -l | tr -d ' ') packages into ${DIST_DIR#"$ROOT"/}"

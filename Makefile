@@ -1,20 +1,22 @@
 # Local builds run in a container of the target series and architecture; the work tree is bind-
 # mounted, so the build tree (several GB) lands on the host disk, not inside Docker's.
-#   make build test package                       # focal: everything up to the bundle in dist/
-#   make build test package TARGET=resolute       # the same for Ubuntu 26.04
+#   make build test package                       # focal, PHP 8.1: everything up to the bundle in dist/
+#   make build test package PHP_BRANCH=8.3        # another branch (branches/*.env)
+#   make build test package TARGET=resolute       # the same for Ubuntu 26.04 (8.1 only)
 #   make upload                                   # dry run; then  make upload APPLY=1  and  make presign
 # CONTAINER=<name> names the build/test container, so a watchdog can stop it.
 TARGET ?= focal
-export TARGET
-# Make before 4.4 (macOS ships 3.81) does not export variables to $(shell), so pass TARGET explicitly.
-SERIES := $(shell export TARGET='$(TARGET)' ROOT=.; . ./config.env && echo $$TARGET_SERIES)
+PHP_BRANCH ?= 8.1
+export TARGET PHP_BRANCH
+# Make before 4.4 (macOS ships 3.81) does not export variables to $(shell), so pass them explicitly.
+SERIES := $(shell export TARGET='$(TARGET)' PHP_BRANCH='$(PHP_BRANCH)' ROOT=.; . ./config.env && echo $$TARGET_SERIES)
 ifeq ($(SERIES),)
-$(error no TARGET_SERIES for TARGET=$(TARGET): is there a targets/$(TARGET).env?)
+$(error no TARGET_SERIES for TARGET=$(TARGET) PHP_BRANCH=$(PHP_BRANCH): are there targets/$(TARGET).env and branches/$(PHP_BRANCH).env?)
 endif
 ARCH   ?= arm64
 IMAGE  ?= ubuntu:$(SERIES)
 # LOCAL_TAG and MAINTAINER pass through only when set, so config.env's defaults apply otherwise.
-RUN     = docker run --rm$(if $(CONTAINER), --name $(CONTAINER)) --platform linux/$(ARCH) -e TARGET=$(TARGET) -e ARCH=$(ARCH) -e BUILDER_IMAGE=$(IMAGE) -e LOCAL_TAG -e MAINTAINER -v "$(CURDIR)":/work -w /work $(IMAGE)
+RUN     = docker run --rm$(if $(CONTAINER), --name $(CONTAINER)) --platform linux/$(ARCH) -e TARGET=$(TARGET) -e PHP_BRANCH=$(PHP_BRANCH) -e ARCH=$(ARCH) -e BUILDER_IMAGE=$(IMAGE) -e LOCAL_TAG -e MAINTAINER -v "$(CURDIR)":/work -w /work $(IMAGE)
 
 .PHONY: all fetch build test package upload presign clean
 all: build test package

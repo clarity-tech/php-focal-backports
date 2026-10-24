@@ -16,6 +16,8 @@ stages: [build, test, package, upload]
 
 variables:
   ARCH: arm64
+  # This pipeline builds one PHP branch (branches/*.env); GitHub Actions builds them all.
+  PHP_BRANCH: "8.1"
   # Hosted arm64 runner, 4 vCPU / 16 GB.
   BUILD_RUNNER_TAG: saas-linux-medium-arm64
 
