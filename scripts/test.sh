@@ -81,7 +81,8 @@ check "mod_php: serves a PHP page (PHP $php_version, apache2handler, pcre, sessi
 check "mod_php: no crashes in the Apache error log" "! grep -qiE 'segfault|exit signal|child pid [0-9]+ exit' /var/log/apache2/error.log"
 [ "${SURY_TELEMETRY:-off}" = off ] && check "mod_php has no sury DNS telemetry compiled in" "[ -n '$modso' ] && ! grep -q telemetry.sury.org '$modso'"
 apache2ctl stop >/dev/null 2>&1 || true
-echo "   info: ICU $($P -r 'echo INTL_ICU_VERSION;'), IntlListFormatter $($P -r 'echo class_exists("IntlListFormatter") ? "present" : "absent";') (PHP 8.5 compiles it in only with ICU >= 67)"
+# PHP 8.5's IntlListFormatter offers TYPE_OR, TYPE_UNITS, WIDTH_SHORT and WIDTH_NARROW only with ICU >= 67.
+echo "   info: ICU $($P -r 'echo INTL_ICU_VERSION; if (class_exists("IntlListFormatter")) echo ", IntlListFormatter ", defined("IntlListFormatter::TYPE_OR") ? "with" : "without", " TYPE_OR/TYPE_UNITS/WIDTH_SHORT/WIDTH_NARROW";')"
 
 # The rebuild must expose exactly what production's PHP does: same functions, classes, methods and
 # constants in every extension, and the same compiled-in library versions.

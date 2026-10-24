@@ -133,7 +133,9 @@ libgd differs by branch, following each branch's last focal build:
 
 The focal 2.3.3-13 upload's files are gone from Launchpad. It was a no-change backport of the same
 Debian source as the jammy 2.3.3-13 upload, which is still published and verifies, so the jammy
-upload stands in for it (`@jammy` in `FOCAL_LIBGD`). 2.3.3-13 dropped libraqm.
+upload stands in for it (`@jammy` in `FOCAL_LIBGD`). 2.3.3-13 dropped libraqm. Our builds' `libgd3`
+links libraqm0 with -12 and not with -13, and neither links libheif or libavif, which matches the
+packages in the PPA's build logs.
 
 The libraries are built arch-only, as Launchpad's arm64 builders built them. libidn2's
 `Build-Depends-Indep` alone would pull in texlive. The build log prints each runtime library's
@@ -196,8 +198,10 @@ Hosts that run the PPA's or packages.sury.org's own builds from February 2026 on
 ### PHP 8.5: a trial
 
 The PPA never built php8.5 for focal. Its build dependencies' version floors are all met by focal,
-so CI builds and tests it, but it may fail, and it is never released. Focal's ICU is 66, so
-`IntlListFormatter` (ICU >= 67) is not compiled in; the test prints whether it is present.
+so CI builds and tests it, but it may fail, and it is never released. It builds and passes the
+same tests as the other branches, mod_php included. Focal's ICU is 66, so `IntlListFormatter`
+exists but supports only `TYPE_AND` and `WIDTH_WIDE`: `TYPE_OR`, `TYPE_UNITS`, `WIDTH_SHORT` and
+`WIDTH_NARROW` need ICU >= 67. The test prints which applies.
 
 ## Pipeline
 
