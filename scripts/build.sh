@@ -25,10 +25,10 @@ mkdir -p ~/.gnupg && chmod 700 ~/.gnupg && cp "$keyring" ~/.gnupg/trustedkeys.gp
 rm -rf "$BUILD_DIR" "$DIST_DIR"; mkdir -p "$BUILD_DIR" "$DIST_DIR"
 DEBFULLNAME=${MAINTAINER% <*}; DEBEMAIL=${MAINTAINER##*<}; DEBEMAIL=${DEBEMAIL%>}; export DEBFULLNAME DEBEMAIL
 
-# build_one <name> <version>: verify, unpack, rebuild and collect one source package. Prints the
-# .debs it produced, one per line, on fd 3.
+# build_one <name> <version> [-B]: verify, unpack, rebuild and collect one source package. Prints
+# the .debs it produced, one per line, on fd 3. -B builds the architecture-dependent packages only.
 build_one() {
-  local name=$1 version=$2 dsc new note
+  local name=$1 version=$2 mode=${3:--b} dsc new note
   # The pinned version's own .dsc: src/<name>/ may hold others (libgd2 -12 and -13).
   dsc=$(src_dir_of "$name" "$version")/${name}_$(noepoch "$version").dsc
   [ -f "$dsc" ] || die "no ${dsc#"$ROOT"/}: run scripts/fetch.sh first"
@@ -46,14 +46,16 @@ build_one() {
   note=""; [ "$name" = "$PHP_SOURCE" ] && [ "$SURY_TELEMETRY" = off ] && note=" Built without sury's DNS telemetry."
   dch -b --newversion "$new" --distribution "$TARGET_SERIES" --force-distribution \
     "Rebuild of $version for Ubuntu $TARGET_VERSION ($TARGET_SERIES). No source changes.$note"
-  mk-build-deps --install --remove --tool 'apt-get -y -qq --no-install-recommends' debian/control >/dev/null
+  # With -B, only Build-Depends (mk-build-deps --build-dep), which is what dpkg-buildpackage -B checks.
+  local depsof=(); [ "$mode" = -B ] && depsof=(--build-dep)
+  mk-build-deps --install --remove "${depsof[@]}" --tool 'apt-get -y -qq --no-install-recommends' debian/control >/dev/null
   # See SURY_TELEMETRY in config.env. This edits the build container only, never the packages.
   if [ -n "$note" ] && [ -s /usr/lib/php/php-common.mk ]; then
     : > /usr/lib/php/php-common.mk
     log "emptied /usr/lib/php/php-common.mk in the build container: telemetry is compiled out"
   fi
   # nocheck: the upstream test suites take hours (PHP's); scripts/test.sh checks the result instead.
-  DEB_BUILD_OPTIONS="nocheck parallel=$(nproc)" dpkg-buildpackage -b -uc -us > "$BUILD_DIR/$name.build.log" 2>&1 \
+  DEB_BUILD_OPTIONS="nocheck parallel=$(nproc)" dpkg-buildpackage "$mode" -uc -us > "$BUILD_DIR/$name.build.log" 2>&1 \
     || { tail -40 "$BUILD_DIR/$name.build.log"; die "$name failed to build (log: ${BUILD_DIR#"$ROOT"/}/$name.build.log)"; }
 
   cd "$BUILD_DIR"
@@ -62,13 +64,19 @@ build_one() {
 }
 
 # 1. Libraries (LIB_SOURCES, focal only), so PHP compiles against the same ones the PPA's focal
-# builds did. Each library's runtime and -dev packages go into the build container straight away,
+# builds did. Arch-only (-B), as Launchpad's arm64 builders built them: their arch-all packages are
+# docs nobody installs, and their Build-Depends-Indep would add gigabytes (libidn2's pulls in
+# texlive). Each library's runtime and -dev packages go into the build container straight away,
 # before anything that builds against them; its tools, docs and language bindings do not.
 each_lib | while read -r name version _; do
-  debs=$(build_one "$name" "$version" 3>&1 >&2)
+  debs=$(build_one "$name" "$version" -B 3>&1 >&2)
   want=$(echo "$debs" | grep -E '^lib' | grep -vE -- '-(dbg|doc|tools|utils)_|dbgsym' | sed "s#^#$DIST_DIR/#")
   apt-get install -y -qq --no-install-recommends $want >/dev/null
   log "installed $(echo "$want" | xargs -n1 basename | sed 's/_.*//' | tr '\n' ' ')for the builds that follow"
+  # What each runtime library links to, for comparing with the PPA's (libgd3: libraqm0, libheif1?).
+  for d in $want; do
+    case "$d" in *-dev_*) ;; *) echo "   $(dpkg-deb -f "$d" Package) depends: $(dpkg-deb -f "$d" Depends)" ;; esac
+  done
 done
 
 # 2. php-defaults, then PHP: PHP build-depends on php-common, includes its
