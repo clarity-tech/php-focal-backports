@@ -23,7 +23,9 @@ covers some systems only:
 - **Ubuntu 26.04 on arm64 lagged.** On 2026-10-22, packages.sury.org's resolute arm64 index still
   served the pre-fix 8.1.34-8, while amd64 already had 8.1.34-9. By 2026-10-24 both architectures
   served 8.1.34-9, so that gap has closed. The resolute target stays: its build is the same signed
-  source, with the DNS telemetry compiled out (see [No phone-home](#no-phone-home)).
+  source, with the DNS telemetry compiled out (see [No phone-home](#no-phone-home)). The same
+  2026-10-24 index still served pre-fix 8.2.34, 8.3.35 and 8.5.11 on arm64, while amd64 had the
+  fixed releases. This project builds only 8.1 for resolute.
 
 This project rebuilds the PPA's own **signed** source packages, **unchanged**, for each target. The
 fix comes from upstream and the PPA's maintainer, not from us. What this adds is a way to rebuild
@@ -66,6 +68,7 @@ changelog records the fix under the CVE ids. For 8.2 and later, the test also ch
 | `resolute` | Ubuntu 26.04 | images that install PHP 8.1 from packages.sury.org | the same set, with their dependencies |
 
 The resolute target builds 8.1 only: packages.sury.org builds every branch for resolute itself.
+Another branch would go in `TARGET_BRANCHES` in `targets/resolute.env`; that is untested.
 
 ## What it builds
 
@@ -90,6 +93,13 @@ The version is always `<revision>+ubuntu<version>.1~<LOCAL_TAG>`, with no `~` st
 Debian revision, so it compares >= the revision it rebuilds and a fix-floor check passes. An epoch
 (`1:` for 7.4 and 8.0) is kept. Bump `LOCAL_TAG` for every new build; the release workflow uses
 `clarity2`.
+
+Every bundle also carries its own build of php-defaults, and on focal of the eight libraries below,
+under the same `LOCAL_TAG`. So bundles of different branches carry, for example,
+`php-common 2:101~+ubuntu20.04.1~clarity2` and `libzstd1 1.4.8+dfsg-2+ubuntu20.04.1~clarity2` with
+the same version but different bytes. php-common is arch `all`, so the arm64 and amd64 bundles do too.
+`host/install.sh` never installs the libraries, and installs php-common only when the host's is
+too old, so hosts are unaffected. Do not load several bundles into one apt repository.
 
 - **focal:** it sorts above the PPA's last focal build of each branch, such as
   8.3.21-1+ubuntu20.04.1+deb.sury.org+1. It sorts **below** an official PPA build of the same
@@ -150,6 +160,12 @@ passed every functional test. It was refused only by the install dry run on a ca
 `php8.1-zip : Depends: libzip5`. It had also silently dropped GD's AVIF functions and pcre2's
 `\K`-in-lookaround option.
 
+The check that matters on a PPA host is apt's: will the new packages' dependencies resolve
+against what the host already has? For each branch, the `Depends` and `Pre-Depends` of every
+arm64 package in our bundle (31 to 35 packages per branch, from the first all-branches CI run) were
+compared with the same packages in the PPA's last focal build log. They match: the same libraries
+at the same version floors. The one difference is mod_php's, above.
+
 The libraries go into the bundle so `scripts/test.sh` can install them on a clean focal. On hosts,
 `host/install.sh` upgrades PHP packages only. Each host keeps its own libraries, which are the same
 versions or newer, and ours sort below the PPA's, so apt never prefers them.
@@ -160,8 +176,10 @@ versions or newer, and ours sort below the PPA's, so apt never prefers them.
 The PPA's focal builds used apache2 2.4.63, apr 1.7.2, apr-util 1.6.3 and brotli 1.1.0 from
 `ppa:ondrej/apache2`, whose focal files are all gone, so they cannot be rebuilt. The module is
 built for Apache 2.4's module API, `apache2-api-20120211`, which focal's 2.4.41 and the PPA's 2.4.63
-both provide. CI tests it with focal's 2.4.41 only: Apache loads the module and serves a PHP page
-through it. If your hosts run the PPA's Apache, simulate the install on one first.
+both provide. Its one packaging difference from the PPA's is `Depends: apache2-bin (>= 2.4.16)`
+where the PPA's has a bare `apache2-bin`; any 2.4.41 or later meets it. CI tests it with focal's
+2.4.41 only: Apache loads the module and serves a PHP page through it. If your hosts run the PPA's
+Apache, simulate the install on one first.
 
 ### API parity
 
