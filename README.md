@@ -2,7 +2,7 @@
 
 Security-patched PHP packages for **Ubuntu 20.04 (focal)**, which no supplier builds any more:
 every PHP branch that Ondřej Surý's PPA fixed for PHP2Shell, which is **7.4, 8.0, 8.1, 8.2, 8.3 and
-8.4**. Also PHP 8.1 for **Ubuntu 26.04 (resolute)**. Built and tested on arm64 (AWS Graviton) and
+8.4**. Also PHP 8.1 for **Ubuntu 26.04 (resolute)**, plus 8.2 and 8.3 for 26.04 on arm64. Built and tested on arm64 (AWS Graviton) and
 amd64. PHP 8.5 is built for focal as a trial only, and never released.
 
 ## Why it exists
@@ -25,7 +25,9 @@ covers some systems only:
   served 8.1.34-9, so that gap has closed. The resolute target stays: its build is the same signed
   source, with the DNS telemetry compiled out (see [No phone-home](#no-phone-home)). The same
   2026-10-24 index still served pre-fix 8.2.34, 8.3.35 and 8.5.11 on arm64, while amd64 had the
-  fixed releases. This project builds only 8.1 for resolute.
+  fixed releases, so this project also builds 8.2 and 8.3 for resolute on arm64. 8.5 is left out:
+  Ubuntu 26.04 ships its own fixed php8.5 (USN-8948-1), and these bundles do not replace Ubuntu's
+  builds.
 
 This project rebuilds the PPA's own **signed** source packages, **unchanged**, for each target. The
 fix comes from upstream and the PPA's maintainer, not from us. What this adds is a way to rebuild
@@ -52,8 +54,8 @@ Two variables select a build:
 | 7.4 | 1:7.4.33-31 | `0164-Avoid-state-corruption-via-bailout.patch` | focal |
 | 8.0 | 1:8.0.30-25 | `0137-Avoid-state-corruption-via-bailout.patch` | focal |
 | 8.1 | 8.1.34-9 | `0083-Avoid-state-corruption-via-bailout.patch` | focal, resolute |
-| 8.2 | 8.2.35-1 | upstream 8.2.35 | focal |
-| 8.3 | 8.3.36-1 | upstream 8.3.36 | focal |
+| 8.2 | 8.2.35-1 | upstream 8.2.35 | focal, resolute (arm64) |
+| 8.3 | 8.3.36-1 | upstream 8.3.36 | focal, resolute (arm64) |
 | 8.4 | 8.4.27-1 | upstream 8.4.27 | focal |
 | 8.5 | 8.5.12-1 | upstream 8.5.12 | focal, **trial only** |
 
@@ -65,10 +67,11 @@ changelog records the fix under the CVE ids. For 8.2 and later, the test also ch
 | `TARGET` | Series | For | Tested package set |
 |---|---|---|---|
 | `focal` (default) | Ubuntu 20.04 | hosts that ran the PPA's PHP before it dropped focal | a typical Laravel web node's packages, and mod_php |
-| `resolute` | Ubuntu 26.04 | images that install PHP 8.1 from packages.sury.org | the same set, with their dependencies |
+| `resolute` | Ubuntu 26.04 | images that install PHP 8.1, 8.2 or 8.3 from packages.sury.org | the same set, with their dependencies |
 
-The resolute target builds 8.1 only: packages.sury.org builds every branch for resolute itself.
-Another branch would go in `TARGET_BRANCHES` in `targets/resolute.env`; that is untested.
+The resolute target builds 8.1 on both architectures, and 8.2 and 8.3 on arm64 only, where
+packages.sury.org's builds lagged. Other branches come from packages.sury.org. Another branch would
+go in `TARGET_BRANCHES` in `targets/resolute.env` and the CI matrix.
 
 ## What it builds
 
@@ -245,7 +248,7 @@ take about another 1.3 GB inside Docker's disk.
 ```bash
 make build test package ARCH=arm64                   # focal, PHP 8.1; about 20-40 minutes on 8 cores
 make build test package PHP_BRANCH=8.3 ARCH=amd64    # another branch
-make build test package TARGET=resolute ARCH=arm64   # resolute (8.1 only)
+make build test package TARGET=resolute ARCH=arm64   # resolute, PHP 8.1 (8.2 and 8.3 also build)
 make test-install                                    # install.sh simulate against the bundle
 make upload [PHP_BRANCH=8.3] [TARGET=resolute]       # dry run
 make upload APPLY=1 && make presign
@@ -257,8 +260,8 @@ make upload APPLY=1 && make presign
 
 `.github/workflows/release.yml` builds, tests and packages on GitHub's runners, arm64
 (`ubuntu-24.04-arm`) and amd64 (`ubuntu-24.04`):
-- **build:** focal x 7.4, 8.0, 8.1, 8.2, 8.3 and 8.4, and resolute x 8.1, on both architectures, 14
-  jobs. Each also runs `make test-install`.
+- **build:** focal x 7.4, 8.0, 8.1, 8.2, 8.3 and 8.4, and resolute x 8.1, on both architectures,
+  plus resolute x 8.2 and 8.3 on arm64: 16 jobs. Each also runs `make test-install`.
 - **trial:** focal x 8.5 on both architectures. It is allowed to fail, and its bundles are kept as
   run artifacts only.
 

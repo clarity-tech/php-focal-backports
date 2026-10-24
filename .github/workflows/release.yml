@@ -1,7 +1,8 @@
 # Build, test and package every branch and target on native GitHub runners, then publish the
 # bundles to a GitHub Release when a tag is pushed. Run it by hand to build without releasing.
 #
-#   build   focal x PHP 7.4, 8.0, 8.1, 8.2, 8.3, 8.4, and resolute x PHP 8.1, each on arm64 and amd64
+#   build   focal x PHP 7.4, 8.0, 8.1, 8.2, 8.3, 8.4, and resolute x PHP 8.1, each on arm64 and amd64;
+#           resolute x PHP 8.2 and 8.3 on arm64 only
 #   trial   focal x PHP 8.5, on both: the PPA never built 8.5 for focal. Built and tested, allowed to
 #           fail, never released.
 #
@@ -37,6 +38,9 @@ jobs:
         include:
           - {target: resolute, php: '8.1', arch: arm64}
           - {target: resolute, php: '8.1', arch: amd64}
+          # arm64 only: packages.sury.org's resolute amd64 builds of 8.2 and 8.3 are fixed.
+          - {target: resolute, php: '8.2', arch: arm64}
+          - {target: resolute, php: '8.3', arch: arm64}
     runs-on: ${{ matrix.arch == 'arm64' && 'ubuntu-24.04-arm' || 'ubuntu-24.04' }}
     # A PHP build is 30-60 minutes of CPU; focal also rebuilds eight libraries first.
     timeout-minutes: 300
@@ -160,7 +164,7 @@ jobs:
         run: |
           base="https://github.com/$GITHUB_REPOSITORY/releases/download/$TAG"
           {
-            echo "Rebuilds of \`ppa:ondrej/php\`'s signed sources, unchanged, with the PHP2Shell fix (CVE-2026-109618, CVE-2026-109619): PHP 7.4, 8.0, 8.1, 8.2, 8.3 and 8.4 for Ubuntu 20.04 (focal), and PHP 8.1 for 26.04 (resolute), on arm64 and amd64. Read the README before installing, and snapshot each production node first."
+            echo "Rebuilds of \`ppa:ondrej/php\`'s signed sources, unchanged, with the PHP2Shell fix (CVE-2026-109618, CVE-2026-109619): PHP 7.4, 8.0, 8.1, 8.2, 8.3 and 8.4 for Ubuntu 20.04 (focal), and PHP 8.1 for 26.04 (resolute), on arm64 and amd64, plus PHP 8.2 and 8.3 for 26.04 on arm64. Read the README before installing, and snapshot each production node first."
             echo
             echo "| Bundle | sha256 |"
             echo "|---|---|"
