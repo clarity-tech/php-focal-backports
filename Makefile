@@ -3,6 +3,7 @@
 #   make build test package                       # focal, PHP 8.1: everything up to the bundle in dist/
 #   make build test package PHP_BRANCH=8.3        # another branch (branches/*.env)
 #   make build test package TARGET=resolute       # the same for Ubuntu 26.04 (8.1 only)
+#   make test-install                             # host/install.sh simulate against the bundle
 #   make upload                                   # dry run; then  make upload APPLY=1  and  make presign
 # CONTAINER=<name> names the build/test container, so a watchdog can stop it.
 TARGET ?= focal
@@ -18,7 +19,7 @@ IMAGE  ?= ubuntu:$(SERIES)
 # LOCAL_TAG and MAINTAINER pass through only when set, so config.env's defaults apply otherwise.
 RUN     = docker run --rm$(if $(CONTAINER), --name $(CONTAINER)) --platform linux/$(ARCH) -e TARGET=$(TARGET) -e PHP_BRANCH=$(PHP_BRANCH) -e ARCH=$(ARCH) -e BUILDER_IMAGE=$(IMAGE) -e LOCAL_TAG -e MAINTAINER -v "$(CURDIR)":/work -w /work $(IMAGE)
 
-.PHONY: all fetch build test package upload presign clean
+.PHONY: all fetch build test package test-install upload presign clean
 all: build test package
 
 fetch:
@@ -30,6 +31,10 @@ build: fetch
 # A fresh container, so the test sees what a real host would, not the build environment.
 test:
 	$(RUN) bash scripts/test.sh
+
+# host/install.sh, in simulate mode, against the bundle that `package` made, in a fresh container.
+test-install:
+	$(RUN) bash scripts/test_install.sh
 
 package:
 	ARCH=$(ARCH) BUILDER_IMAGE=$(IMAGE)@$$(docker image inspect -f '{{index .RepoDigests 0}}' $(IMAGE) 2>/dev/null | cut -d@ -f2) scripts/package.sh

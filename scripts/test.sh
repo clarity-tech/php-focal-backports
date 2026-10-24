@@ -41,6 +41,9 @@ if [ -n "$FIX_UPSTREAM" ]; then
   check "fixed upstream: PHP $php_version >= $FIX_UPSTREAM" \
         "$P -r 'exit(version_compare(PHP_VERSION, \"$FIX_UPSTREAM\", \">=\") ? 0 : 1);'"
 fi
+# host/install.sh carries its own table of floors, so that a bundle cannot vouch for itself.
+check "host/install.sh has the same fix floor for $PHP_BRANCH" \
+      "grep -qxF '  $PHP_BRANCH) FLOOR=$FIX_FLOOR ;;' '$ROOT/host/install.sh'"
 
 for m in bcmath curl gd gmp intl json mbstring mysqli pdo_mysql sqlite3 xml zip readline sodium exif pcntl posix sockets; do
   check "cli module $m" "$P -m | grep -qix $m"
