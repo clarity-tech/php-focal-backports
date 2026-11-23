@@ -36,6 +36,13 @@ check "package version is the rebuild ($want_version)" "[ '$pkg_version' = '$wan
 # fails the check depending on timing.
 check "changelog records the PHP2Shell fix" \
       "[ \"\$(zcat /usr/share/doc/$P-common/changelog.Debian.gz | grep -c 'CVE-2026-109618, CVE-2026-109619')\" -gt 0 ]"
+# The 2026-11-19 security release: upstream 8.2.36, 8.3.37, 8.4.28 and 8.5.13, and the PPA's
+# backports of 8.2.36 to 7.4, 8.0 and 8.1. Five CVEs that every branch's changelog names, each
+# checked on its own, so that repeated mentions of one cannot stand in for another.
+for cve in CVE-2026-129289 CVE-2026-129291 CVE-2026-129496 CVE-2026-126714 CVE-2026-115560; do
+  check "changelog records $cve (2026-11-19)" \
+        "[ \"\$(zcat /usr/share/doc/$P-common/changelog.Debian.gz | grep -c '$cve')\" -gt 0 ]"
+done
 check "fix floor: $P-common $pkg_version >= $FIX_FLOOR" "dpkg --compare-versions '$pkg_version' ge '$FIX_FLOOR'"
 if [ -n "$FIX_UPSTREAM" ]; then
   check "fixed upstream: PHP $php_version >= $FIX_UPSTREAM" \
