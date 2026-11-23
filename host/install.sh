@@ -7,7 +7,7 @@
 # so a host with several branches installed is upgraded one bundle at a time.
 #
 # Guarded: nothing is installed unless the bundle's checksum matches, every file inside matches
-# SHA256SUMS, the bundle is at or above that branch's PHP2Shell fix floor, and apt's dry run shows
+# SHA256SUMS, the bundle is at or above that branch's fix floor, and apt's dry run shows
 # that only the host's existing packages of that branch change, with nothing removed. Modified
 # config files are kept (the PHP2Shell stopgap lines in pool.d, php.ini edits such as
 # post_max_size). Separately built extensions (mongodb, redis, igbinary, msgpack, opentelemetry)
@@ -52,18 +52,19 @@ host_series=$(. /etc/os-release; echo "${VERSION_CODENAME:-}")
 common=$(cd debs && for f in php[0-9]*.[0-9]*-common_*.deb; do [ -e "$f" ] && echo "$f"; done)
 [ "$(echo "$common" | grep -c .)" = 1 ] || { echo "!! expected one php<X.Y>-common package in the bundle, found: ${common:-none}"; exit 2; }
 PHP=${common%%-common_*}; BRANCH=${PHP#php}
-# The first version of each branch that carries the PHP2Shell fix (CVE-2026-109618, CVE-2026-109619).
+# The first version of each branch that carries the 2026-11-19 PHP security release (and with it the
+# earlier PHP2Shell fix, CVE-2026-109618 and CVE-2026-109619).
 # Kept here, not read from the bundle, so that a bundle cannot vouch for itself. Equal to FIX_FLOOR
 # in the repository's branches/<branch>.env; scripts/test.sh checks that they agree.
 case "$BRANCH" in
-  7.4) FLOOR=1:7.4.33-31 ;;
-  8.0) FLOOR=1:8.0.30-25 ;;
-  8.1) FLOOR=8.1.34-9 ;;
-  8.2) FLOOR=8.2.35-1 ;;
-  8.3) FLOOR=8.3.36-1 ;;
-  8.4) FLOOR=8.4.27-1 ;;
-  8.5) FLOOR=8.5.12-1 ;;
-  *) echo "!! no PHP2Shell fix floor known for $PHP"; exit 2 ;;
+  7.4) FLOOR=1:7.4.33-36 ;;
+  8.0) FLOOR=1:8.0.30-30 ;;
+  8.1) FLOOR=8.1.34-13 ;;
+  8.2) FLOOR=8.2.36-1 ;;
+  8.3) FLOOR=8.3.37-1 ;;
+  8.4) FLOOR=8.4.28-1 ;;
+  8.5) FLOOR=8.5.13-1 ;;
+  *) echo "!! no fix floor known for $PHP"; exit 2 ;;
 esac
 new=$(dpkg-deb -f "debs/$common" Version)
 dpkg --compare-versions "$new" ge "$FLOOR" || { echo "!! the bundle's $PHP-common $new is below the fix floor $FLOOR"; exit 2; }

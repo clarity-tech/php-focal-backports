@@ -1,17 +1,37 @@
 # php-focal-backports
 
 Security-patched PHP packages for **Ubuntu 20.04 (focal)**, which no supplier builds any more:
-every PHP branch that Ondřej Surý's PPA fixed for PHP2Shell, which is **7.4, 8.0, 8.1, 8.2, 8.3 and
-8.4**. Also PHP 8.1 for **Ubuntu 26.04 (resolute)**, plus 8.2 and 8.3 for 26.04 on arm64. Built and tested on arm64 (AWS Graviton) and
+every PHP branch that Ondřej Surý's PPA fixed, which is **7.4, 8.0, 8.1, 8.2, 8.3 and 8.4**, at the
+**2026-11-19 PHP security release**. Also PHP 8.1 for **Ubuntu 26.04 (resolute)**, plus 8.2 and 8.3 for 26.04 on arm64. Built and tested on arm64 (AWS Graviton) and
 amd64. PHP 8.5 is built for focal as a trial only, and never released.
 
 ## Why it exists
 
-On 2026-10-21 PHP released fixes for **CVE-2026-109618 and CVE-2026-109619** ("PHP2Shell") in
+On **2026-11-19** PHP released 8.5.13, 8.4.28, 8.3.37 and 8.2.36, which fix 12 to 18 CVEs per branch.
+Among them:
+- CVE-2026-129289: PHP-FPM request smuggling through an unread request body;
+- CVE-2026-129291: a PHP-FPM epoll use-after-free, which can lead to local privilege escalation;
+- CVE-2026-129496: a timezone cache use-after-free, which can lead to remote code execution;
+- CVE-2026-126714 and CVE-2026-115560: session handling bugs, which can lead to remote code
+  execution;
+- CVE-2026-129538: a PHP-CGI out-of-bounds read and write.
+
+The PPA released the upstream versions as 8.2.36-1, 8.3.37-1, 8.4.28-1 and 8.5.13-1. It backported
+the 8.2.36 fixes to the end-of-life branches as 1:7.4.33-36, 1:8.0.30-30 and 8.1.34-13. The uploads
+these bundles rebuild (`-2`, `-37`, `-31`, `-14`) add nothing else: they only move the upstream test
+suite to autopkgtest. Each changelog lists its CVEs.
+
+These were the PPA's last uploads. On 2026-11-20 it was relabelled "PPA for PHP (deprecated)" and
+froze. sury now publishes the same signed sources at packages.sury.org, whose later builds
+(`8.2.36-3`, ...) add packaging cleanup and a SOAP DTD fix, and no CVE fix. `scripts/fetch.sh`
+still reads Launchpad, which keeps serving the frozen PPA's files, so the next fix will need fetch
+to read packages.sury.org.
+
+The release before, on 2026-10-21, fixed **CVE-2026-109618 and CVE-2026-109619** ("PHP2Shell") in
 8.5.12, 8.4.27, 8.3.36 and 8.2.35. PHP 7.4, 8.0 and 8.1 are past their upstream end of life.
 `ppa:ondrej/php` shipped fixed uploads of every branch, each carrying the fix. For 7.4, 8.0 and
-8.1 the fix is the maintainer's backported patch, "Avoid state corruption via bailout". That
-covers some systems only:
+8.1 the fix is the maintainer's backported patch, "Avoid state corruption via bailout". Either
+way, the PPA's fixes covered some systems only:
 
 - **Ubuntu 20.04 got nothing from the PPA.**
   - The PPA stopped building focal in 2025, and deleted its last focal build of every branch on
@@ -25,7 +45,9 @@ covers some systems only:
   served 8.1.34-9, so that gap has closed. The resolute target stays: its build is the same signed
   source, with the DNS telemetry compiled out (see [No phone-home](#no-phone-home)). The same
   2026-10-24 index still served pre-fix 8.2.34, 8.3.35 and 8.5.11 on arm64, while amd64 had the
-  fixed releases, so this project also builds 8.2 and 8.3 for resolute on arm64. 8.5 is left out:
+  fixed releases, so this project also builds 8.2 and 8.3 for resolute on arm64. By 2026-11-23
+packages.sury.org served the 2026-11-19 builds of every branch on both architectures; these bundles
+stay the same signed sources with the telemetry compiled out. 8.5 is left out:
   Ubuntu 26.04 ships its own fixed php8.5 (USN-8948-1), and these bundles do not replace Ubuntu's
   builds.
 
@@ -51,18 +73,24 @@ Two variables select a build:
 
 | `PHP_BRANCH` | Fixed upload (jammy, `+ubuntu22.04.1+deb.sury.org+1`) | The fix | Targets |
 |---|---|---|---|
-| 7.4 | 1:7.4.33-31 | `0164-Avoid-state-corruption-via-bailout.patch` | focal |
-| 8.0 | 1:8.0.30-25 | `0137-Avoid-state-corruption-via-bailout.patch` | focal |
-| 8.1 | 8.1.34-9 | `0083-Avoid-state-corruption-via-bailout.patch` | focal, resolute |
-| 8.2 | 8.2.35-1 | upstream 8.2.35 | focal, resolute (arm64) |
-| 8.3 | 8.3.36-1 | upstream 8.3.36 | focal, resolute (arm64) |
-| 8.4 | 8.4.27-1 | upstream 8.4.27 | focal |
-| 8.5 | 8.5.12-1 | upstream 8.5.12 | focal, **trial only** |
+| `PHP_BRANCH` | Fixed upload (jammy, `+ubuntu22.04.1+deb.sury.org+1`) | The 2026-11-19 fixes | Fix floor | Targets |
+|---|---|---|---|---|
+| 7.4 | 1:7.4.33-37 | the PPA's backport of 8.2.36 | 1:7.4.33-36 | focal |
+| 8.0 | 1:8.0.30-31 | the PPA's backport of 8.2.36 | 1:8.0.30-30 | focal |
+| 8.1 | 8.1.34-14 | the PPA's backport of 8.2.36 | 8.1.34-13 | focal, resolute |
+| 8.2 | 8.2.36-2 | upstream 8.2.36 | 8.2.36-1 | focal, resolute (arm64) |
+| 8.3 | 8.3.37-2 | upstream 8.3.37 | 8.3.37-1 | focal, resolute (arm64) |
+| 8.4 | 8.4.28-2 | upstream 8.4.28 | 8.4.28-1 | focal |
+| 8.5 | 8.5.13-2 | upstream 8.5.13 | 8.5.13-1 | focal, **trial only** |
 
-The fix floor is the fixed upload's Debian version (`1:7.4.33-31`, `8.1.34-9`, `8.2.35-1`, ...).
-`scripts/test.sh` fails a build below it, and `host/install.sh` refuses one. Every branch's
-changelog records the fix under the CVE ids. For 8.2 and later, the test also checks that
-`PHP_VERSION` reaches the upstream release.
+Every upload also keeps the PHP2Shell fix of 2026-10-21 (CVE-2026-109618, CVE-2026-109619). For 7.4,
+8.0 and 8.1 that is the PPA's patch "Avoid state corruption via bailout"; for 8.2 and later it is the
+upstream release.
+
+The fix floor is the first Debian version carrying the 2026-11-19 fixes. `scripts/test.sh` fails a
+build below it, and `host/install.sh` refuses one. Every branch's changelog must also name five of
+the 2026-11-19 CVEs (129289, 129291, 129496, 126714, 115560) and the PHP2Shell pair. For 8.2 and
+later, the test also checks that `PHP_VERSION` reaches the upstream release.
 
 | `TARGET` | Series | For | Tested package set |
 |---|---|---|---|
@@ -79,7 +107,7 @@ go in `TARGET_BRANCHES` in `targets/resolute.env` and the CI matrix.
 
 | Source | Version taken from the PPA (jammy) | Built as (focal / resolute) | Why |
 |---|---|---|---|
-| php&lt;branch&gt; | see the table above | e.g. 8.1.34-9+ubuntu20.04.1~&lt;LOCAL_TAG&gt; / 8.1.34-9+ubuntu26.04.1~&lt;LOCAL_TAG&gt; | carries the PHP2Shell fix |
+| php&lt;branch&gt; | see the table above | e.g. 8.1.34-14+ubuntu20.04.1~&lt;LOCAL_TAG&gt; / 8.1.34-14+ubuntu26.04.1~&lt;LOCAL_TAG&gt; | carries the fixes |
 | php-defaults | 101~+ubuntu22.04.1+deb.sury.org+1 | 2:101~+ubuntu20.04.1~&lt;LOCAL_TAG&gt; / 2:101~+ubuntu26.04.1~&lt;LOCAL_TAG&gt; | provides `php-common`, which every branch needs at a version focal and resolute do not have |
 
 php-defaults is needed on both targets:

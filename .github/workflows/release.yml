@@ -164,7 +164,7 @@ jobs:
         run: |
           base="https://github.com/$GITHUB_REPOSITORY/releases/download/$TAG"
           {
-            echo "Rebuilds of \`ppa:ondrej/php\`'s signed sources, unchanged, with the PHP2Shell fix (CVE-2026-109618, CVE-2026-109619): PHP 7.4, 8.0, 8.1, 8.2, 8.3 and 8.4 for Ubuntu 20.04 (focal), and PHP 8.1 for 26.04 (resolute), on arm64 and amd64, plus PHP 8.2 and 8.3 for 26.04 on arm64. Read the README before installing, and snapshot each production node first."
+            echo "Rebuilds of \`ppa:ondrej/php\`'s signed sources, unchanged, with the fixes of the 2026-11-19 PHP security release (8.2.36, 8.3.37, 8.4.28, 8.5.13; backported to 7.4, 8.0 and 8.1) and the earlier PHP2Shell fix: PHP 7.4, 8.0, 8.1, 8.2, 8.3 and 8.4 for Ubuntu 20.04 (focal), and PHP 8.1 for 26.04 (resolute), on arm64 and amd64, plus PHP 8.2 and 8.3 for 26.04 on arm64. Read the README before installing, and snapshot each production node first."
             echo
             echo "| Bundle | sha256 |"
             echo "|---|---|"

@@ -19,7 +19,7 @@ sha ./*.deb | sed 's# \./# #' > SHA256SUMS
   echo "repo commit:   $(git -C "$ROOT" rev-parse --short HEAD 2>/dev/null || echo unknown)$(git -C "$ROOT" diff --quiet 2>/dev/null || echo ' (uncommitted changes)')"
   echo "builder image: ${BUILDER_IMAGE:-unknown}"
   echo "target:        Ubuntu $TARGET_VERSION ($TARGET_SERIES) $ARCH"
-  echo "php:           $PHP_SOURCE $(target_version_of "$PHP_SOURCE_VERSION"), PHP2Shell fix floor $FIX_FLOOR"
+  echo "php:           $PHP_SOURCE $(target_version_of "$PHP_SOURCE_VERSION"), fix floor $FIX_FLOOR"
   echo "sources (ppa:$PPA_OWNER/$PPA_NAME, signed by upload key $UPLOAD_KEY_FPR; libraries from ${LIB_SERIES:-none} unless noted, the rest from $SOURCE_SERIES):"
   { each_lib; each_source | sed "s/\$/ $SOURCE_SERIES lib-series-not-applicable/"; } | while read -r n v s x; do
     note=""; [ -n "$x" ] || [ "$s" = "${LIB_SERIES:-}" ] || note=" (the $s upload)"
